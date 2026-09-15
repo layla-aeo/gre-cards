@@ -20,19 +20,32 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Gentium+Book+Plus:wght@400;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="app.css?v=5">
 </head>
 <body>
 <div id="app">
   <div class="bar" id="bar"></div>
   <div id="view"><div class="loading">载入中…</div></div>
 </div>
+<script>window.__build = 'v5';</script>
 <script src="decks/index.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=5"></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function(){
-    navigator.serviceWorker.register('sw.js').catch(function(){});
+    navigator.serviceWorker.register('sw.js').then(function(reg){
+      reg.addEventListener('updatefound', function(){
+        var sw = reg.installing;
+        if (!sw) return;
+        sw.addEventListener('statechange', function(){
+          // A newer build took over an already-running page: reload once into it.
+          if (sw.state === 'activated' && navigator.serviceWorker.controller) {
+            location.reload();
+          }
+        });
+      });
+      reg.update();
+    }).catch(function(){});
   });
 }
 </script>

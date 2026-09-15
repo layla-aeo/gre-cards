@@ -170,7 +170,8 @@
         '<div class="books">' + rows + '</div>' +
         voicePanel() +
       '</div>' +
-      (syncNote ? '<div class="sync">' + esc(syncNote) + '</div>' : '');
+      '<div class="sync">' + (syncNote ? esc(syncNote) + ' · ' : '') +
+        '版本 ' + esc(window.__build || 'artifact') + '</div>';
 
     Array.prototype.forEach.call(view.querySelectorAll('.book'), function(el){
       el.addEventListener('click', function(){ openBook(el.getAttribute('data-book')); });
