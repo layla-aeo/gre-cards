@@ -141,6 +141,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   padding:30px 26px;text-align:center;
   user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+  -webkit-touch-callout:none;
 }
 .face.back{background:var(--card-back);transform:rotateX(180deg)}
 .word{
@@ -193,6 +194,77 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .voice .vtry{flex:none;font-size:13px;padding:8px 14px;border-radius:999px;border:1px solid var(--accent-soft);color:var(--accent)}
 .voice .vtry:hover{background:var(--panel-2)}
 .vtip{margin:9px 2px 0;font-size:11.5px;line-height:1.65;color:var(--ink-2)}
+
+/* ---------- 常错词 ---------- */
+.book.wrong{border-style:dashed}
+.book.wrong .t{color:var(--accent)}
+
+.wrap{padding:0 18px 90px}
+.wrap h2{font-family:var(--serif);font-weight:500;font-size:24px;margin:8px 0 4px}
+.wrap .sub{font-size:13px;color:var(--ink-2);margin:0 0 16px}
+.startrow{margin-bottom:16px}
+.startrow button{
+  border:1px solid var(--accent-soft);color:var(--accent);
+  padding:10px 20px;border-radius:999px;font-size:14px;
+}
+.startrow button:hover{background:var(--panel)}
+.wlist{display:flex;flex-direction:column;gap:8px}
+.wrow{
+  display:flex;align-items:center;gap:12px;
+  background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;padding:12px 8px 12px 15px;
+}
+.wrow .wmain{flex:1;min-width:0}
+.wrow .ww{font-family:var(--serif);font-size:17px;font-weight:500;display:block}
+.wrow .wp{font-family:var(--ipa);font-size:12.5px;color:var(--ink-2);margin-left:8px;font-weight:400}
+.wrow .wm{
+  font-family:var(--cjk);font-size:12.5px;color:var(--ink-2);
+  display:block;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.wrow .wdel{
+  flex:none;width:40px;height:40px;border-radius:999px;
+  color:var(--ink-2);font-size:19px;line-height:1;
+}
+.wrow .wdel:hover{background:var(--panel-2);color:var(--ink)}
+.empty{
+  padding:44px 24px;text-align:center;color:var(--ink-2);
+  font-size:14px;line-height:1.85;
+  border:1px dashed var(--line);border-radius:var(--r);
+}
+
+/* ---------- back to top ---------- */
+.totop{
+  position:fixed;right:18px;z-index:40;
+  bottom:calc(20px + env(safe-area-inset-bottom));
+  width:48px;height:48px;border-radius:999px;
+  background:var(--panel);border:1px solid var(--line);
+  color:var(--ink);font-size:19px;line-height:1;
+  box-shadow:0 6px 18px -6px rgba(0,0,0,.4);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;transform:translateY(8px);pointer-events:none;
+  transition:opacity .2s ease, transform .2s ease;
+}
+.totop.on{opacity:1;transform:translateY(0);pointer-events:auto}
+.totop:hover{border-color:var(--accent-soft);color:var(--accent)}
+
+/* ---------- toast ---------- */
+.toast{
+  position:fixed;left:50%;z-index:60;
+  bottom:calc(84px + env(safe-area-inset-bottom));
+  transform:translate(-50%,10px);
+  background:var(--ink);color:var(--bg);
+  font-size:13.5px;padding:10px 18px;border-radius:999px;
+  opacity:0;pointer-events:none;transition:opacity .2s ease, transform .2s ease;
+  white-space:nowrap;
+}
+.toast.on{opacity:.95;transform:translate(-50%,0)}
+
+.star{
+  position:absolute;top:14px;right:16px;
+  font-size:12px;letter-spacing:.06em;color:var(--card-sub);
+  opacity:0;transition:opacity .2s ease;
+}
+.star.on{opacity:.85}
 
 .loading{padding:60px 20px;text-align:center;color:var(--ink-2);font-size:14px}
 .sync{font-size:11px;color:var(--ink-2);letter-spacing:.04em;padding:0 18px 14px;text-align:center}

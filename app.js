@@ -24,11 +24,12 @@
 
   /* ---------------- progress: local first, synced when db exists -------- */
   var LS = 'gre-cards-v1';
-  var prog = { pos:{}, done:{}, last:null };
+  var prog = { pos:{}, done:{}, last:null, wrong:[] };
   try {
     var got = localStorage.getItem(LS);
     if (got) prog = Object.assign(prog, JSON.parse(got));
   } catch(e){}
+  if (!Array.isArray(prog.wrong)) prog.wrong = [];
 
   var db = null, saveTimer = null, syncNote = '';
   function persist(){
@@ -37,7 +38,8 @@
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function(){
       db.doc('progress/state').set({
-        pos: prog.pos, done: prog.done, last: prog.last, at: Date.now()
+        pos: prog.pos, done: prog.done, last: prog.last,
+        wrong: prog.wrong, at: Date.now()
       }).catch(function(){});
     }, 900);
   }
@@ -52,6 +54,11 @@
           prog.pos = Object.assign({}, r.pos || {}, prog.pos);
           prog.done = Object.assign({}, r.done || {}, prog.done);
           prog.last = prog.last || r.last || null;
+          if (Array.isArray(r.wrong)){
+            var have = {};
+            prog.wrong.forEach(function(c){ have[c.w] = 1; });
+            r.wrong.forEach(function(c){ if (c && c.w && !have[c.w]) prog.wrong.push(c); });
+          }
           try { localStorage.setItem(LS, JSON.stringify(prog)); } catch(e){}
         }
         syncNote = '进度已跨设备同步';
@@ -133,6 +140,67 @@
     return n;
   }
 
+  /* ---------------- 常错词 ---------------- */
+  function wrongIdx(w){
+    for (var i = 0; i < prog.wrong.length; i++) if (prog.wrong[i].w === w) return i;
+    return -1;
+  }
+  function addWrong(c){
+    if (wrongIdx(c.w) >= 0) return false;
+    prog.wrong.unshift({ w:c.w, p:c.p || '', m:(c.m || []).slice(0, 3) });
+    persist();
+    return true;
+  }
+  function removeWrong(w){
+    var i = wrongIdx(w);
+    if (i < 0) return false;
+    prog.wrong.splice(i, 1);
+    persist();
+    return true;
+  }
+  function wrongBook(){
+    return { key:'wrong', title:'常错词', decks:[{ n:1, cards:prog.wrong.slice() }] };
+  }
+
+  var toastEl = null, toastTimer = null;
+  function toast(msg){
+    if (!toastEl){
+      toastEl = document.createElement('div');
+      toastEl.className = 'toast';
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = msg;
+    requestAnimationFrame(function(){ toastEl.classList.add('on'); });
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ toastEl.classList.remove('on'); }, 1500);
+  }
+  function buzz(){
+    try { if (navigator.vibrate) navigator.vibrate(18); } catch(e){}
+  }
+
+  /* ---------------- back to top ---------------- */
+  var topBtn = null;
+  function ensureTopBtn(){
+    if (topBtn) return topBtn;
+    topBtn = document.createElement('button');
+    topBtn.className = 'totop';
+    topBtn.type = 'button';
+    topBtn.setAttribute('aria-label', '回到顶部');
+    topBtn.textContent = '↑';
+    topBtn.addEventListener('click', function(){
+      try { window.scrollTo({ top:0, behavior:'smooth' }); }
+      catch(e){ window.scrollTo(0, 0); }
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    });
+    document.body.appendChild(topBtn);
+    return topBtn;
+  }
+  function setTopBtn(on){
+    ensureTopBtn();
+    topBtn.classList.toggle('on', !!on);
+  }
+
   /* ---------------- view: shelf ---------------- */
   function renderShelf(){
     state.view = 'shelf';
@@ -151,6 +219,14 @@
         '<span class="track"><i style="width:' + pct + '%"></i></span>' +
       '</button>';
     }).join('');
+
+    rows += '<button class="book wrong" data-book="__wrong">' +
+      '<span class="n">' + prog.wrong.length + ' 词</span>' +
+      '<span class="t">常错词</span>' +
+      '<span class="s">' + (prog.wrong.length
+        ? '你自己攒的 · 长按卡片可移出'
+        : '还是空的 · 背词时长按卡片加进来') + '</span>' +
+    '</button>';
 
     var resume = '';
     if (prog.last){
@@ -174,9 +250,62 @@
         '版本 ' + esc(window.__build || 'artifact') + '</div>';
 
     Array.prototype.forEach.call(view.querySelectorAll('.book'), function(el){
-      el.addEventListener('click', function(){ openBook(el.getAttribute('data-book')); });
+      el.addEventListener('click', function(){
+        var k = el.getAttribute('data-book');
+        if (k === '__wrong') openWrong(); else openBook(k);
+      });
     });
     wireVoicePanel();
+    setTopBtn(false);
+  }
+
+  /* ---------------- view: 常错词列表 ---------------- */
+  function openWrong(){
+    state.view = 'wrong';
+    shelfBar();
+    setTopBtn(prog.wrong.length > 8);
+
+    if (!prog.wrong.length){
+      view.innerHTML =
+        '<div class="wrap">' +
+          '<h2>常错词</h2>' +
+          '<p class="sub">0 词</p>' +
+          '<div class="empty">这里还是空的。<br>背词的时候<b>长按卡片</b>,那个词就会存进来。</div>' +
+        '</div>';
+      return;
+    }
+
+    var rows = prog.wrong.map(function(c, i){
+      return '<div class="wrow">' +
+        '<span class="wmain">' +
+          '<span class="ww">' + esc(c.w) +
+            (c.p ? '<span class="wp">' + esc(c.p) + '</span>' : '') + '</span>' +
+          '<span class="wm">' + esc((c.m || []).join(' / ')) + '</span>' +
+        '</span>' +
+        '<button class="wdel" data-i="' + i + '" aria-label="移出常错词">×</button>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML =
+      '<div class="wrap">' +
+        '<h2>常错词</h2>' +
+        '<p class="sub">' + prog.wrong.length + ' 词 · 最近加的在最上面</p>' +
+        '<div class="startrow"><button id="w-start">背这些词</button></div>' +
+        '<div class="wlist">' + rows + '</div>' +
+      '</div>';
+
+    document.getElementById('w-start').addEventListener('click', function(){
+      openDeck(wrongBook(), 1);
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.wdel'), function(el){
+      el.addEventListener('click', function(){
+        var c = prog.wrong[parseInt(el.getAttribute('data-i'), 10)];
+        if (!c) return;
+        removeWrong(c.w);
+        toast('已移出「' + c.w + '」');
+        openWrong();
+      });
+    });
   }
 
   function voicePanel(){
@@ -252,6 +381,7 @@
         openDeck(b, parseInt(el.getAttribute('data-n'), 10));
       });
     });
+    setTopBtn(true);
   }
 
   /* ---------------- view: study ---------------- */
@@ -268,11 +398,14 @@
   }
 
   function renderStudy(b){
+    setTopBtn(false);
     bar.innerHTML =
       '<button class="back" id="s-back">← ' + esc(b.title) + '</button>' +
       '<span class="spacer"></span>' +
       '<span class="meta" id="s-meta"></span>';
-    document.getElementById('s-back').addEventListener('click', function(){ renderDecks(b); });
+    document.getElementById('s-back').addEventListener('click', function(){
+      if (b.key === 'wrong') openWrong(); else renderDecks(b);
+    });
 
     view.innerHTML =
       '<div class="study">' +
@@ -281,6 +414,7 @@
           '<div class="drag" id="s-drag">' +
             '<div class="inner" id="s-inner">' +
               '<div class="face front">' +
+                '<span class="star" id="s-star">常错词</span>' +
                 '<div class="word" id="s-word"></div>' +
                 '<div class="ipa" id="s-ipa"></div>' +
               '</div>' +
@@ -294,6 +428,7 @@
         '<div class="hint" id="s-hint">' +
           '<span><b>←</b> 下一个</span><span><b>→</b> 上一个</span>' +
           '<span><b>↑</b> 中文</span><span><b>点</b> 发音</span>' +
+          '<span><b>长按</b> ' + (b.key === 'wrong' ? '移出' : '存进常错词') + '</span>' +
         '</div>' +
       '</div>';
 
@@ -320,9 +455,12 @@
     w.className = 'word' + (c.w.length > 17 ? ' xlong' : c.w.length > 11 ? ' long' : '');
     document.getElementById('s-ipa').textContent = c.p || '';
     document.getElementById('s-echo').textContent = c.w;
+    document.getElementById('s-star').classList.toggle('on',
+      b.key !== 'wrong' && wrongIdx(c.w) >= 0);
     document.getElementById('s-zh').innerHTML = renderZh(c.m);
     document.getElementById('s-meta').textContent =
-      '第 ' + cur.n + ' 页 · ' + (state.idx + 1) + ' / ' + cards.length;
+      (b.key === 'wrong' ? '常错词' : '第 ' + cur.n + ' 页') +
+      ' · ' + (state.idx + 1) + ' / ' + cards.length;
     document.getElementById('s-rail').style.width =
       ((state.idx + 1) / cards.length * 100) + '%';
     document.getElementById('s-inner').classList.toggle('flipped', state.flipped);
@@ -331,20 +469,27 @@
   }
 
   function finish(b){
-    var k = keyOf(b.key, cur.n);
-    prog.done[k] = 1; prog.pos[k] = 0; persist();
-    document.getElementById('s-meta').textContent = '第 ' + cur.n + ' 页 · 完成';
+    var isWrong = b.key === 'wrong';
+    if (!isWrong){
+      var k = keyOf(b.key, cur.n);
+      prog.done[k] = 1; prog.pos[k] = 0; persist();
+    }
+    document.getElementById('s-meta').textContent =
+      isWrong ? '常错词 · 完成' : '第 ' + cur.n + ' 页 · 完成';
     document.getElementById('s-rail').style.width = '100%';
     document.getElementById('s-stage').outerHTML =
       '<div class="done">' +
-        '<p>第 ' + cur.n + ' 页过完了 —— ' + cur.cards.length + ' 个词。</p>' +
-        '<button id="s-again">再过一遍</button> <button id="s-next">下一页</button>' +
+        '<p>' + (isWrong ? '常错词过完了' : '第 ' + cur.n + ' 页过完了') +
+          ' —— ' + cur.cards.length + ' 个词。</p>' +
+        '<button id="s-again">再过一遍</button> ' +
+        '<button id="s-next">' + (isWrong ? '回到常错词' : '下一页') + '</button>' +
       '</div>';
     document.getElementById('s-hint').style.display = 'none';
     document.getElementById('s-again').addEventListener('click', function(){
       state.idx = 0; state.flipped = false; renderStudy(b);
     });
     document.getElementById('s-next').addEventListener('click', function(){
+      if (isWrong) return openWrong();
       var nx = b.decks.filter(function(d){ return d.n === cur.n + 1; })[0];
       if (nx) openDeck(b, nx.n); else renderDecks(b);
     });
@@ -357,6 +502,30 @@
     var inner = document.getElementById('s-inner');
     var hint = document.getElementById('s-hint');
     var sx = 0, sy = 0, st = 0, moved = false, active = false, used = false;
+    var holdTimer = null, held = false;
+
+    function clearHold(){ clearTimeout(holdTimer); holdTimer = null; }
+
+    function onHold(){
+      held = true;
+      buzz();
+      var c = cur.cards[state.idx];
+      if (!c) return;
+      if (b.key === 'wrong'){
+        removeWrong(c.w);
+        toast('已移出「' + c.w + '」');
+        cur.cards.splice(state.idx, 1);
+        if (!cur.cards.length){ openWrong(); return; }
+        if (state.idx >= cur.cards.length) state.idx = cur.cards.length - 1;
+        state.flipped = false;
+        inner.classList.remove('flipped');
+        paint(b);
+      } else {
+        if (addWrong(c)) toast('已存进常错词');
+        else { removeWrong(c.w); toast('已移出常错词'); }
+        document.getElementById('s-star').classList.toggle('on', wrongIdx(c.w) >= 0);
+      }
+    }
 
     function reset(anim){
       drag.style.transition = anim ? 'transform .28s cubic-bezier(.3,.7,.3,1)' : 'none';
@@ -400,16 +569,20 @@
     }
 
     stage.addEventListener('pointerdown', function(e){
-      active = true; moved = false;
+      active = true; moved = false; held = false;
       sx = e.clientX; sy = e.clientY; st = Date.now();
       reset(false);
       try { stage.setPointerCapture(e.pointerId); } catch(err){}
+      clearHold();
+      holdTimer = setTimeout(function(){ if (active && !moved) onHold(); }, 550);
     });
+
+    stage.addEventListener('contextmenu', function(e){ e.preventDefault(); });
 
     stage.addEventListener('pointermove', function(e){
       if (!active) return;
       var dx = e.clientX - sx, dy = e.clientY - sy;
-      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) moved = true;
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5){ moved = true; clearHold(); }
       if (Math.abs(dx) >= Math.abs(dy)){
         drag.style.transform = 'translateX(' + dx + 'px) rotate(' + (dx / 26) + 'deg)';
       } else if (dy < 0){
@@ -422,8 +595,11 @@
     function release(e){
       if (!active) return;
       active = false;
+      clearHold();
       var dx = e.clientX - sx, dy = e.clientY - sy;
       var dt = Date.now() - st, ax = Math.abs(dx), ay = Math.abs(dy);
+
+      if (held){ held = false; reset(false); return; }
 
       if (!moved && dt < 500){
         reset(false);
@@ -442,7 +618,9 @@
     }
 
     stage.addEventListener('pointerup', release);
-    stage.addEventListener('pointercancel', function(){ active = false; reset(true); });
+    stage.addEventListener('pointercancel', function(){
+      active = false; held = false; clearHold(); reset(true);
+    });
 
     document.onkeydown = function(e){
       if (state.view !== 'study') return;
