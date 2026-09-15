@@ -1,4 +1,4 @@
-const CACHE = 'gre-cards-v3';
+const CACHE = 'gre-cards-v4';
 
 const SHELL = [
   './',

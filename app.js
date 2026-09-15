@@ -208,11 +208,15 @@
   }
 
   /* ---------------- view: deck grid ---------------- */
+  function shelfBar(){
+    bar.innerHTML = '<button class="back" id="b-back">← 书架</button>';
+    document.getElementById('b-back').addEventListener('click', renderShelf);
+  }
+
   function openBook(key){
     state.book = key;
     view.innerHTML = '<div class="loading">载入词库…</div>';
-    bar.innerHTML = '<button class="back" id="b-back">← 书架</button>';
-    document.getElementById('b-back').addEventListener('click', renderShelf);
+    shelfBar();
     loadBook(key).then(renderDecks).catch(function(){
       view.innerHTML = '<div class="loading">词库载入失败,刷新再试。</div>';
     });
@@ -220,6 +224,7 @@
 
   function renderDecks(b){
     state.view = 'decks';
+    shelfBar();
     var cells = b.decks.map(function(d){
       var k = keyOf(b.key, d.n);
       var n = d.cards.length;
