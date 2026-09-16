@@ -1,13 +1,12 @@
-const VERSION = 'v7';
+const VERSION = 'v8';
 const CACHE = 'gre-cards-' + VERSION;
 
 // Code: always try the network first so a fix reaches the phone immediately.
-const CODE = ['./', './index.html', './app.css', './app.js', './manifest.webmanifest'];
+const CODE = ['./', './index.html', './app.css', './app.js', './config.js', './manifest.webmanifest'];
 // Data and icons never change in place; serve them from cache.
 const DATA = [
   './icon-192.png', './icon-512.png', './icon-180.png',
-  './decks/index.js', './decks/jing3000.js', './decks/jingjing7.js',
-  './decks/dengjia.js', './decks/reading.js', './decks/math.js'
+  './books/index.js', './books/gre.js', './books/ielts.js'
 ];
 
 self.addEventListener('install', (e) => {
@@ -31,7 +30,7 @@ self.addEventListener('message', (e) => {
 });
 
 function isCode(url) {
-  return /\/$|\.html$|app\.css$|app\.js$|\.webmanifest$/.test(new URL(url).pathname);
+  return /\/$|\.html$|app\.css$|app\.js$|config\.js$|\.webmanifest$/.test(new URL(url).pathname);
 }
 
 self.addEventListener('fetch', (e) => {
