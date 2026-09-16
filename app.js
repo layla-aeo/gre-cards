@@ -293,54 +293,114 @@
 
     view.innerHTML = '<div class="loading">载入词库…</div>';
     loadBook(picked).then(function(b){
-      var doneN = 0;
-      b.decks.forEach(function(d){ if (data.done[key(b.key, d.n)]) doneN++; });
-      var pct = Math.round(doneN / b.decks.length * 100);
-      var resume = '';
-      if (data.last && data.last.book === b.key){
-        var ld = b.decks.filter(function(d){ return d.n === data.last.deck; })[0];
-        if (ld) resume = '<button class="btn pri" id="v-resume">继续 ' +
-          esc(ld.name.split(' · ').slice(-1)[0]) + '</button>';
-      }
-      view.innerHTML =
-        '<div class="pad">' +
-          '<div class="masthead"><h1>' + esc(b.title) + '</h1>' +
-            '<p>' + meta.cards + ' 词 · ' + b.decks.length + ' 个板块' +
-            (doneN ? ' · 已过 ' + doneN : '') + '</p>' +
-            '<div class="track" style="margin-top:12px"><i style="width:' + pct + '%"></i></div>' +
-            (resume ? '<div style="margin-top:14px">' + resume + '</div>' : '') +
-          '</div>' +
-          wrongRow +
-          '<div style="height:18px"></div>' +
-          '<div class="grid">' + b.decks.map(function(d){
-            var k = key(b.key, d.n);
-            var at = data.pos[k] || 0, done = data.done[k] ? 1 : 0;
-            var p = done ? 100 : Math.round(at / d.cards.length * 100);
-            var short = d.name.split(' · ').slice(-1)[0];
-            return '<button class="deck" data-n="' + d.n + '" data-done="' + done + '">' +
-              (p ? '<span class="p" style="width:' + p + '%"></span>' : '') +
-              '<span class="np' + (b.key === 'ielts' ? ' sm' : '') + '">' +
-                esc(b.key === 'ielts' ? short : d.n) + '</span>' +
-              '<span class="nc">' + d.cards.length + ' 词</span>' +
-            '</button>';
-          }).join('') + '</div>' +
-        '</div>';
-
-      if (resume){
-        document.getElementById('v-resume').addEventListener('click', function(){
-          openDeck(b, data.last.deck);
-        });
-      }
-      Array.prototype.forEach.call(view.querySelectorAll('.deck'), function(el){
-        el.addEventListener('click', function(){
-          openDeck(b, parseInt(el.getAttribute('data-n'), 10));
-        });
-      });
-      wireOpen();
-      setTopBtn(true);
+      // A book made of parts (GRE) lists its source books first.
+      if (b.parts) return drawParts(b, meta, wrongRow);
+      drawDecks(b, meta.cards, wrongRow, null);
     }).catch(function(){
       view.innerHTML = '<div class="loading">词库载入失败,刷新再试。</div>';
     });
+  }
+
+  function partStats(p){
+    var done = 0;
+    for (var i = 1; i <= p.decks; i++) if (data.done[key(p.key, i)]) done++;
+    return done;
+  }
+
+  function drawParts(b, meta, wrongRow){
+    view.innerHTML =
+      '<div class="pad">' +
+        '<div class="masthead"><h1>' + esc(b.title) + '</h1>' +
+          '<p>' + meta.cards + ' 词 · ' + b.parts.length + ' 本原书 · ' +
+            meta.decks + ' 页</p></div>' +
+        wrongRow +
+        '<div style="height:18px"></div>' +
+        '<div class="books">' + b.parts.map(function(p){
+          var d = partStats(p);
+          var pct = Math.round(d / p.decks * 100);
+          return '<button class="book" data-p="' + esc(p.key) + '">' +
+            '<span class="n">' + p.cards + ' 词</span>' +
+            '<span class="t">' + esc(p.title) + '</span>' +
+            '<span class="s">' + esc(p.sub) + ' · ' + p.decks + ' 页' +
+              (d ? ' · 已过 ' + d : '') + '</span>' +
+            '<span class="track"><i style="width:' + pct + '%"></i></span>' +
+          '</button>';
+        }).join('') + '</div>' +
+      '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('.book'), function(el){
+      el.addEventListener('click', function(){ openPart(el.getAttribute('data-p')); });
+    });
+    wireOpen();
+    setTopBtn(true);
+  }
+
+  function openPart(pkey){
+    sub = { view:'part', pkey:pkey, draw:function(){ drawPart(pkey); } };
+    drawPart(pkey);
+  }
+
+  function drawPart(pkey){
+    renderNav();
+    bar.innerHTML = '<button class="back" id="b-back">← 词汇</button>';
+    document.getElementById('b-back').addEventListener('click', function(){ sub = null; render(); });
+    view.innerHTML = '<div class="loading">载入…</div>';
+    loadBook(pkey).then(function(p){
+      drawDecks(p, null, '', function(){ sub = null; render(); });
+    }).catch(function(){
+      view.innerHTML = '<div class="loading">载入失败,刷新再试。</div>';
+    });
+  }
+
+  function drawDecks(b, totalWords, wrongRow, back){
+    var doneN = 0;
+    b.decks.forEach(function(d){ if (data.done[key(b.key, d.n)]) doneN++; });
+    var pct = Math.round(doneN / b.decks.length * 100);
+    var total = totalWords != null ? totalWords :
+      b.decks.reduce(function(a, d){ return a + d.cards.length; }, 0);
+    var byPage = /^第 \d+ 页$/.test(b.decks[0].name);
+
+    var resume = '';
+    if (data.last && data.last.book === b.key){
+      var ld = b.decks.filter(function(d){ return d.n === data.last.deck; })[0];
+      if (ld) resume = '<button class="btn pri" id="v-resume">继续 ' +
+        esc(ld.name.split(' · ').slice(-1)[0]) + '</button>';
+    }
+
+    view.innerHTML =
+      '<div class="pad">' +
+        '<div class="masthead"><h1>' + esc(b.title) + '</h1>' +
+          '<p>' + total + ' 词 · ' + b.decks.length + (byPage ? ' 页' : ' 个板块') +
+          (doneN ? ' · 已过 ' + doneN : '') + '</p>' +
+          '<div class="track" style="margin-top:12px"><i style="width:' + pct + '%"></i></div>' +
+          (resume ? '<div style="margin-top:14px">' + resume + '</div>' : '') +
+        '</div>' +
+        (wrongRow ? wrongRow + '<div style="height:18px"></div>' : '') +
+        '<div class="grid">' + b.decks.map(function(d){
+          var k = key(b.key, d.n);
+          var at = data.pos[k] || 0, done = data.done[k] ? 1 : 0;
+          var p = done ? 100 : Math.round(at / d.cards.length * 100);
+          var short = d.name.split(' · ').slice(-1)[0];
+          return '<button class="deck" data-n="' + d.n + '" data-done="' + done + '">' +
+            (p ? '<span class="p" style="width:' + p + '%"></span>' : '') +
+            '<span class="np' + (byPage ? '' : ' sm') + '">' +
+              esc(byPage ? d.n : short) + '</span>' +
+            '<span class="nc">' + d.cards.length + ' 词</span>' +
+          '</button>';
+        }).join('') + '</div>' +
+      '</div>';
+
+    if (resume){
+      document.getElementById('v-resume').addEventListener('click', function(){
+        openDeck(b, data.last.deck, back);
+      });
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('.deck'), function(el){
+      el.addEventListener('click', function(){
+        openDeck(b, parseInt(el.getAttribute('data-n'), 10), back);
+      });
+    });
+    wireOpen();
+    setTopBtn(true);
   }
 
   function wireOpen(){
@@ -444,10 +504,15 @@
     view.innerHTML = '<div class="loading">载入…</div>';
 
     loadBook(meta.key).then(function(b){
+      // A book of parts carries no decks itself; sample from its first part.
+      if (b.parts) return loadBook(b.parts[0].key).then(function(p){ return [b, p.decks]; });
+      return [b, b.decks];
+    }).then(function(pair){
+      var b = pair[0], decks = pair[1];
       var on = data.myBook === b.key;
       var sample = [];
-      for (var i = 0; i < b.decks.length && sample.length < 6; i += Math.max(1, (b.decks.length / 6) | 0)){
-        var c = b.decks[i].cards[0];
+      for (var i = 0; i < decks.length && sample.length < 6; i += Math.max(1, (decks.length / 6) | 0)){
+        var c = decks[i].cards[0];
         if (c) sample.push(c);
       }
       view.innerHTML =
@@ -456,7 +521,9 @@
           '<p class="sub">' + esc(b.sub) + '</p>' +
           '<div class="card">' +
             '<div class="kv"><span>收词</span><b>' + meta.cards + '</b></div>' +
-            '<div class="kv"><span>板块</span><b>' + b.decks.length + '</b></div>' +
+            (b.parts ? '<div class="kv"><span>原书</span><b>' + b.parts.length + ' 本</b></div>' : '') +
+            '<div class="kv"><span>' + (b.parts ? '总页数' : '板块') + '</span><b>' +
+              meta.decks + '</b></div>' +
             '<div class="kv"><span>带例句</span><b>' + (meta.ex || 0) + '</b></div>' +
             '<div class="row" style="margin-top:16px">' +
               (on ? '<button class="btn" id="p-go">去背这本</button>' +
@@ -605,11 +672,18 @@
   }
 
   /* ---------------- 学习 ---------------- */
-  var cur = null, book = null;
+  var cur = null, book = null, backTo = null;
   var st = { idx:0, flipped:false, sflip:false };
 
-  function openDeck(b, n){
+  function leaveStudy(){
+    if (book.key === 'wrong') return openWrongList();
+    if (book.key.indexOf('.') > 0) return openPart(book.key);
+    sub = null; render();
+  }
+
+  function openDeck(b, n, back){
     book = b;
+    backTo = back || null;
     cur = b.decks.filter(function(d){ return d.n === n; })[0];
     if (!cur) return;
     var k = key(b.key, n);
@@ -627,10 +701,7 @@
     bar.innerHTML =
       '<button class="back" id="s-back">← ' + esc(book.title) + '</button>' +
       '<span class="spacer"></span><span class="meta" id="s-meta"></span>';
-    document.getElementById('s-back').addEventListener('click', function(){
-      if (book.key === 'wrong') return openWrongList();
-      sub = null; render();
-    });
+    document.getElementById('s-back').addEventListener('click', leaveStudy);
 
     view.innerHTML =
       '<div class="study">' +
@@ -726,7 +797,7 @@
     document.getElementById('d-next').addEventListener('click', function(){
       if (isW) return openWrongList();
       var nx = book.decks.filter(function(d){ return d.n === cur.n + 1; })[0];
-      if (nx) openDeck(book, nx.n); else { sub = null; render(); }
+      if (nx) openDeck(book, nx.n, backTo); else leaveStudy();
     });
   }
 
