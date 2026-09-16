@@ -602,6 +602,13 @@
       '</b></div>' +
       '<div class="kv"><span>已过板块</span><b>' + Object.keys(data.done).length + '</b></div>' +
       '<div class="kv"><span>常错词</span><b>' + data.wrong.length + '</b></div>' +
+      '<div class="row" style="margin-top:14px">' +
+        '<button class="btn" id="bk-out">导出备份码</button>' +
+        '<button class="btn" id="bk-in">导入备份码</button>' +
+      '</div>' +
+      '<div id="bk-area"></div>' +
+      '<p class="note">登不上账号时(比如国内网络连不上 Google)用这个在设备之间搬进度:' +
+      '在旧设备导出,把那串码发到新设备粘贴导入。</p>' +
     '</div>';
 
     var voiceOpts = enVoices.map(function(v){
@@ -640,10 +647,127 @@
     if ((el = document.getElementById('s-try'))) el.addEventListener('click', function(){
       speak('meticulous');
     });
+    wireBackup();
     if ((el = document.getElementById('s-sel'))) el.addEventListener('change', function(){
       voice = enVoices.filter(function(v){ return v.name === this.value; }.bind(this))[0] || voice;
       try { localStorage.setItem(VOICE_LS, this.value); } catch(e){}
       speakSynth('vocabulary');
+    });
+  }
+
+  /* ---------------- 备份码 ----------------
+     A self-contained transfer format, so progress can move between devices
+     without reaching any service that may be unreachable. */
+  function b64enc(bytes){
+    var s = '';
+    for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function b64dec(str){
+    var s = str.replace(/[-]/g, '+').replace(/_/g, '/').replace(/\s+/g, '');
+    while (s.length % 4) s += '=';
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  async function squeeze(bytes, mode){
+    var S = mode === 'in' ? window.DecompressionStream : window.CompressionStream;
+    if (!S) return null;
+    var st = new S('gzip');
+    var w = st.writable.getWriter();
+    w.write(bytes); w.close();
+    var chunks = [], rd = st.readable.getReader();
+    for (;;){
+      var r = await rd.read();
+      if (r.done) break;
+      chunks.push(r.value);
+    }
+    var len = chunks.reduce(function(a, c){ return a + c.length; }, 0);
+    var out = new Uint8Array(len), at = 0;
+    chunks.forEach(function(c){ out.set(c, at); at += c.length; });
+    return out;
+  }
+
+  async function makeCode(){
+    var payload = { v:1, myBook:data.myBook, pos:data.pos, done:data.done,
+                    last:data.last, wrong:data.wrong };
+    var raw = new TextEncoder().encode(JSON.stringify(payload));
+    var gz = await squeeze(raw, 'out');
+    return (gz ? 'C1.' + b64enc(gz) : 'P1.' + b64enc(raw));
+  }
+
+  async function readCode(code){
+    code = (code || '').trim();
+    var m = code.match(/^(C1|P1)\.([\s\S]+)$/);
+    if (!m) throw new Error('这串码看起来不完整');
+    var bytes = b64dec(m[2]);
+    if (m[1] === 'C1'){
+      bytes = await squeeze(bytes, 'in');
+      if (!bytes) throw new Error('这台设备的浏览器太旧,解不开压缩的备份码');
+    }
+    var obj = JSON.parse(new TextDecoder().decode(bytes));
+    if (!obj || typeof obj !== 'object') throw new Error('备份码内容不对');
+    return obj;
+  }
+
+  function applyCode(r){
+    var before = Object.keys(data.done).length + data.wrong.length;
+    data.pos = Object.assign({}, data.pos, r.pos || {});
+    data.done = Object.assign({}, data.done, r.done || {});
+    data.myBook = r.myBook || data.myBook;
+    data.last = r.last || data.last;
+    if (Array.isArray(r.wrong)){
+      var have = {};
+      data.wrong.forEach(function(c){ have[c.w] = 1; });
+      r.wrong.forEach(function(c){ if (c && c.w && !have[c.w]) data.wrong.push(c); });
+    }
+    persist();
+    return Object.keys(data.done).length + data.wrong.length - before;
+  }
+
+  function wireBackup(){
+    var area = document.getElementById('bk-area');
+    if (!area) return;
+    var out = document.getElementById('bk-out');
+    var inn = document.getElementById('bk-in');
+
+    out.addEventListener('click', function(){
+      makeCode().then(function(code){
+        area.innerHTML =
+          '<div class="bk">' +
+            '<label for="bk-t">把下面整串复制走(已包含词书、进度和常错词)</label>' +
+            '<textarea id="bk-t" readonly rows="4"></textarea>' +
+            '<div class="row"><button class="btn gho" id="bk-copy">复制</button>' +
+            '<span class="bkn" id="bk-n"></span></div>' +
+          '</div>';
+        var ta = document.getElementById('bk-t');
+        ta.value = code;
+        document.getElementById('bk-n').textContent = code.length + ' 字符';
+        document.getElementById('bk-copy').addEventListener('click', function(){
+          ta.select(); ta.setSelectionRange(0, code.length);
+          var ok = false;
+          try { ok = document.execCommand('copy'); } catch(e){}
+          if (navigator.clipboard) navigator.clipboard.writeText(code).catch(function(){});
+          toast(ok || navigator.clipboard ? '已复制' : '请手动长按选中复制');
+        });
+      }).catch(function(e){ toast('导出失败:' + e.message); });
+    });
+
+    inn.addEventListener('click', function(){
+      area.innerHTML =
+        '<div class="bk">' +
+          '<label for="bk-p">把另一台设备导出的备份码粘贴进来</label>' +
+          '<textarea id="bk-p" rows="4" placeholder="C1...."></textarea>' +
+          '<div class="row"><button class="btn pri" id="bk-go">导入</button></div>' +
+        '</div>';
+      document.getElementById('bk-go').addEventListener('click', function(){
+        var v = document.getElementById('bk-p').value;
+        readCode(v).then(function(r){
+          var added = applyCode(r);
+          toast(added > 0 ? '导入成功,新增 ' + added + ' 项' : '导入成功(内容已存在)');
+          render();
+        }).catch(function(e){ toast('导入失败:' + e.message); });
+      });
     });
   }
 
