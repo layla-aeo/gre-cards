@@ -298,7 +298,9 @@
       var pct = Math.round(doneN / b.decks.length * 100);
       var resume = '';
       if (data.last && data.last.book === b.key){
-        resume = '<button class="btn pri" id="v-resume">继续第 ' + data.last.deck + ' 组</button>';
+        var ld = b.decks.filter(function(d){ return d.n === data.last.deck; })[0];
+        if (ld) resume = '<button class="btn pri" id="v-resume">继续 ' +
+          esc(ld.name.split(' · ').slice(-1)[0]) + '</button>';
       }
       view.innerHTML =
         '<div class="pad">' +
@@ -397,7 +399,25 @@
       '<div class="pad">' +
         '<div class="masthead"><h1>词书</h1>' +
           '<p>选一本加进「词汇」,就能开始背。同一时间学一本,随时可以换。</p></div>' +
-        '<div class="books">' + CATALOG.map(function(b){
+        groupedBooks() +
+      '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('.book'), function(el){
+      el.addEventListener('click', function(){ preview(el.getAttribute('data-b')); });
+    });
+  }
+
+  function groupedBooks(){
+    var groups = [], byKey = {};
+    CATALOG.forEach(function(b){
+      var g = b.group || '其他';
+      if (!byKey[g]){ byKey[g] = []; groups.push(g); }
+      byKey[g].push(b);
+    });
+    return groups.map(function(g){
+      var n = byKey[g].reduce(function(a, b){ return a + b.cards; }, 0);
+      return '<div class="ghead">' + esc(g) +
+             '<span>' + byKey[g].length + ' 本 · ' + n + ' 词</span></div>' +
+        '<div class="books">' + byKey[g].map(function(b){
           var on = data.myBook === b.key;
           return '<button class="book" data-b="' + esc(b.key) + '">' +
             '<span class="n">' + b.cards + ' 词</span>' +
@@ -406,11 +426,8 @@
             '<span class="s">' + esc(b.sub) + ' · ' + b.decks + ' 个板块' +
               (b.ex ? ' · ' + b.ex + ' 条例句' : '') + '</span>' +
           '</button>';
-        }).join('') + '</div>' +
-      '</div>';
-    Array.prototype.forEach.call(view.querySelectorAll('.book'), function(el){
-      el.addEventListener('click', function(){ preview(el.getAttribute('data-b')); });
-    });
+        }).join('') + '</div>';
+    }).join('');
   }
 
   function preview(k){
