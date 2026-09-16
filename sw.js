@@ -1,11 +1,13 @@
-const VERSION = 'v12';
+const VERSION = 'v13';
 const CACHE = 'gre-cards-' + VERSION;
 
 // Code: always try the network first so a fix reaches the phone immediately.
-const CODE = ['./', './index.html', './app.css', './app.js', './config.js', './manifest.webmanifest'];
+const CODE = ['./', './index.html', './manifest.webmanifest',
+  './assets/app.css', './assets/app.js', './assets/config.js'];
 // Data and icons never change in place; serve them from cache.
 const DATA = [
-  './icon-192.png', './icon-512.png', './icon-180.png',
+  './assets/icons/icon-180.png', './assets/icons/icon-192.png',
+  './assets/icons/icon-512.png', './assets/icons/icon-maskable-512.png',
   './books/index.js', './books/gre.js', './books/ielts.js',
   './books/gre.jing3000.js', './books/gre.jingjing7.js', './books/gre.dengjia.js',
   './books/gre.reading.js', './books/gre.math.js', './books/cet6.js'
