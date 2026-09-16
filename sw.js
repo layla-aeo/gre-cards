@@ -1,4 +1,4 @@
-const VERSION = 'v14';
+const VERSION = 'v15';
 const CACHE = 'gre-cards-' + VERSION;
 
 // Code: always try the network first so a fix reaches the phone immediately.
@@ -10,7 +10,8 @@ const DATA = [
   './assets/icons/icon-512.png', './assets/icons/icon-maskable-512.png',
   './books/index.js', './books/gre.js', './books/ielts.js',
   './books/gre.jing3000.js', './books/gre.jingjing7.js', './books/gre.dengjia.js',
-  './books/gre.reading.js', './books/gre.math.js', './books/cet6.js'
+  './books/gre.reading.js', './books/gre.math.js', './books/cet6.js',
+  './books/kaoyan.js'
 ];
 
 self.addEventListener('install', (e) => {

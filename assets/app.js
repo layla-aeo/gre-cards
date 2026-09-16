@@ -854,7 +854,8 @@
     wire();
   }
 
-  var POS_RE = /^((?:adj|adv|vt|vi|v|n|conj|prep|pron|int|abbr|num|art)\.)\s*(.*)$/;
+  // 考研书里一个义项可能挂多个词性:"vt. vi. 散发"
+  var POS_RE = /^((?:(?:adj|adv|vt|vi|v|n|conj|prep|pron|int|abbr|num|art)\.\s*)+)(.*)$/;
   function renderZh(list){
     return (list || []).map(function(s){
       var m = String(s).match(POS_RE);
