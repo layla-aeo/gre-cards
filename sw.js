@@ -1,4 +1,4 @@
-const VERSION = 'v10';
+const VERSION = 'v11';
 const CACHE = 'gre-cards-' + VERSION;
 
 // Code: always try the network first so a fix reaches the phone immediately.

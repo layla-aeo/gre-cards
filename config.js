@@ -1,13 +1,10 @@
-// Firebase 前端配置。填上之后应用才会开启账号登录与云端同步；
-// 留空时应用照常运行，数据只存在本机。
-window.__firebase = null;
-
-// 拿到配置后，把上面一行换成下面这种形式即可：
-// window.__firebase = {
-//   apiKey: "...",
-//   authDomain: "xxx.firebaseapp.com",
-//   projectId: "xxx",
-//   storageBucket: "xxx.appspot.com",
-//   messagingSenderId: "...",
-//   appId: "..."
-// };
+// Firebase 前端配置(公开配置,可以出现在前端代码里)。
+// 数据隔离靠 Firestore 安全规则:每个账号只能读写 users/<自己的uid>。
+window.__firebase = {
+  apiKey: "AIzaSyD00UO-dD9PQS6GXdsO8D8HxepDpwJvjBA",
+  authDomain: "gre-cards-b6684.firebaseapp.com",
+  projectId: "gre-cards-b6684",
+  storageBucket: "gre-cards-b6684.firebasestorage.app",
+  messagingSenderId: "236208893962",
+  appId: "1:236208893962:web:9ce5bf0aa033dfdb0b6ff3"
+};
