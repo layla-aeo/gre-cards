@@ -250,14 +250,37 @@ h2{font-family:var(--serif);font-weight:500;font-size:24px;margin:8px 0 4px}
 .kv b{font-weight:500;font-variant-numeric:tabular-nums}
 .note{font-size:11.5px;line-height:1.7;color:var(--ink-2);margin:10px 2px 0}
 
+/* ---------- 下拉查词 ---------- */
+.pull{
+  height:0;overflow:hidden;flex:none;
+  transition:height .2s cubic-bezier(.3,.7,.3,1);
+}
+.pull.drag{transition:none}
+.pullbox{
+  padding:10px 18px 16px;
+  background:var(--panel);border-bottom:1px solid var(--line);
+}
+.pullhead{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.grab{
+  flex:1;height:4px;border-radius:2px;background:var(--line);
+  max-width:46px;margin:0 auto 0 0;
+}
+.pclose{
+  flex:none;font-size:12.5px;color:var(--ink-2);
+  padding:5px 11px;border-radius:999px;border:1px solid var(--line);
+}
+.pclose:hover{color:var(--ink);border-color:var(--accent-soft)}
+.pull .dres{border-top-color:var(--panel-2)}
+.pull .dsug{max-height:230px}
+
 /* ---------- 查词 ---------- */
 .dwrap{position:relative}
-.dict input{
+.dict input, .pull input{
   width:100%;font:inherit;font-size:16px;color:var(--ink);
   background:var(--panel-2);border:1px solid var(--line);
   border-radius:10px;padding:12px 14px;-webkit-appearance:none;appearance:none;
 }
-.dict input:focus{outline:none;border-color:var(--accent)}
+.dict input:focus, .pull input:focus{outline:none;border-color:var(--accent)}
 .dsug{
   position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:30;
   background:var(--panel);border:1px solid var(--line);border-radius:10px;

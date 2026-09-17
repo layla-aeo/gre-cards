@@ -222,6 +222,7 @@
   function go(t){
     tab = t;
     sub = null;
+    closePull();
     window.scrollTo(0, 0);
     render();
   }
@@ -635,12 +636,7 @@
 
     var dict = '<div class="card dict">' +
       '<h3>查词</h3>' +
-      '<div class="dwrap">' +
-        '<input id="dq" type="search" autocomplete="off" autocapitalize="off" ' +
-          'autocorrect="off" spellcheck="false" placeholder="输入英文单词">' +
-        '<div class="dsug" id="dsug" hidden></div>' +
-      '</div>' +
-      '<div id="dout"></div>' +
+      dictMarkup('d') +
     '</div>';
 
     view.innerHTML = '<div class="pad"><div class="masthead"><h1>主页</h1></div>' +
@@ -716,7 +712,8 @@
     });
   }
 
-  function dictCard(hit){
+  function dictCard(hit, idp){
+    idp = idp || 'd';
     var e = hit.e;
     var senses = (e.t || []).map(function(s){
       var m = String(s).match(POS_RE);
@@ -734,17 +731,111 @@
       (hit.from ? '<p class="dfrom">' + esc(hit.from) + ' → ' + esc(hit.w) + '</p>' : '') +
       '<div class="dsenses">' + senses + '</div>' +
       '<div class="row" style="margin-top:12px">' +
-        '<button class="btn gho" id="d-say">朗读</button>' +
-        '<button class="btn" id="d-add">' + (inWrong ? '移出常错词' : '加入常错词') + '</button>' +
+        '<button class="btn gho" id="' + idp + '-say">朗读</button>' +
+        '<button class="btn" id="' + idp + '-add">' +
+          (inWrong ? '移出常错词' : '加入常错词') + '</button>' +
       '</div>' +
     '</div>';
   }
 
-  function wireDict(){
-    var box = document.getElementById('dq');
+  /* 下拉唤出的查词面板:在列表页从顶部往下拉即可 */
+  var pullEl, pullBox, pullOpen = false;
+
+  function dictMarkup(idp){
+    return '<div class="dwrap">' +
+      '<input id="' + idp + 'q" type="search" autocomplete="off" autocapitalize="off" ' +
+        'autocorrect="off" spellcheck="false" placeholder="查词:输入英文单词">' +
+      '<div class="dsug" id="' + idp + 'sug" hidden></div>' +
+    '</div><div id="' + idp + 'out"></div>';
+  }
+
+  function initPull(){
+    pullEl = document.getElementById('pull');
+    pullBox = document.getElementById('pullbox');
+    if (!pullEl) return;
+    pullBox.innerHTML =
+      '<div class="pullhead"><span class="grab"></span>' +
+        '<button class="pclose" id="pclose">收起</button></div>' +
+      dictMarkup('p');
+    document.getElementById('pclose').addEventListener('click', closePull);
+    wireDict('p');
+
+    var sy = 0, dy = 0, pulling = false, armed = false;
+
+    function canPull(){
+      return !pullOpen && (!sub || sub.view !== 'study') &&
+             (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
+    }
+
+    document.addEventListener('pointerdown', function(e){
+      if (e.target.closest('#pull') || e.target.closest('.nav')) return;
+      armed = canPull();
+      sy = e.clientY; dy = 0; pulling = false;
+    }, { passive:true });
+
+    document.addEventListener('pointermove', function(e){
+      if (!armed) return;
+      dy = e.clientY - sy;
+      if (dy <= 0){
+        if (pulling){ pullEl.style.height = '0px'; pulling = false; }
+        return;
+      }
+      if (!pulling && dy < 8) return;
+      pulling = true;
+      pullEl.classList.add('drag');
+      pullEl.style.height = Math.min(dy * 0.55, 120) + 'px';
+    }, { passive:true });
+
+    // 触摸时要主动挡下页面的橡皮筋滚动,否则下拉会被浏览器抢走
+    document.addEventListener('touchmove', function(e){
+      if (pulling && e.cancelable) e.preventDefault();
+    }, { passive:false });
+
+    function end(){
+      if (!pulling){ armed = false; return; }
+      pulling = false; armed = false;
+      pullEl.classList.remove('drag');
+      if (parseFloat(pullEl.style.height) > 46) openPull();
+      else pullEl.style.height = '0px';
+    }
+    document.addEventListener('pointerup', end, { passive:true });
+    document.addEventListener('pointercancel', end, { passive:true });
+  }
+
+  function openPull(){
+    if (!pullEl) return;
+    pullOpen = true;
+    pullEl.classList.add('open');
+    pullEl.setAttribute('aria-hidden', 'false');
+    pullEl.style.height = pullBox.offsetHeight + 'px';
+    var q = document.getElementById('pq');
+    if (q) setTimeout(function(){ q.focus(); }, 60);
+  }
+
+  function closePull(){
+    if (!pullEl) return;
+    pullOpen = false;
+    pullEl.classList.remove('open', 'drag');
+    pullEl.setAttribute('aria-hidden', 'true');
+    pullEl.style.height = '0px';
+    var q = document.getElementById('pq');
+    if (q){ q.blur(); q.value = ''; }
+    var o = document.getElementById('pout');
+    if (o) o.innerHTML = '';
+    var s = document.getElementById('psug');
+    if (s) s.hidden = true;
+  }
+
+  function growPull(){
+    if (pullOpen && pullEl) pullEl.style.height = pullBox.offsetHeight + 'px';
+  }
+
+  function wireDict(idp){
+    idp = idp || 'd';
+    var box = document.getElementById(idp + 'q');
     if (!box) return;
-    var sug = document.getElementById('dsug');
-    var res = document.getElementById('dout');
+    var sug = document.getElementById(idp + 'sug');
+    var res = document.getElementById(idp + 'out');
     var timer = null, seq = 0;
 
     function showWord(w){
@@ -755,11 +846,13 @@
         if (my !== seq) return;
         if (!hit){
           res.innerHTML = '<p class="dnone">词典里没有「' + esc(w) + '」</p>';
+          growPull();
           return;
         }
-        res.innerHTML = dictCard(hit);
-        document.getElementById('d-say').addEventListener('click', function(){ speak(hit.w); });
-        document.getElementById('d-add').addEventListener('click', function(){
+        res.innerHTML = dictCard(hit, idp);
+        growPull();
+        document.getElementById(idp + '-say').addEventListener('click', function(){ speak(hit.w); });
+        document.getElementById(idp + '-add').addEventListener('click', function(){
           if (wrongIdx(hit.w) >= 0){
             removeWrong(hit.w);
             toast('已移出常错词');
@@ -786,6 +879,7 @@
             return '<button data-w="' + esc(w) + '">' + esc(w) + '</button>';
           }).join('');
           sug.hidden = false;
+          growPull();
           Array.prototype.forEach.call(sug.querySelectorAll('button'), function(el){
             el.addEventListener('click', function(){ showWord(el.getAttribute('data-w')); });
           });
@@ -970,6 +1064,7 @@
   function drawStudy(){
     renderNav();
     setTopBtn(false);
+    closePull();
     bar.innerHTML =
       '<button class="back" id="s-back">← ' + esc(book.title) + '</button>' +
       '<span class="spacer"></span><span class="meta" id="s-meta"></span>';
@@ -1222,5 +1317,6 @@
   /* ================= boot ================= */
   loadLocal();
   initFirebase();
+  initPull();
   render();
 })();
