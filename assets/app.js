@@ -22,6 +22,9 @@
     });
   }
 
+  // 一个义项可能挂多个词性:"vt. vi. 散发"
+  var POS_RE = /^((?:(?:adj|adv|vt|vi|v|n|conj|prep|pron|int|abbr|num|art)\.\s*)+)(.*)$/;
+
   function esc(s){
     return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){
       return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c];
@@ -630,10 +633,22 @@
       '<p class="note">真人录音取自有道词典的英式发音,重音清晰,需要联网;' +
       '拉不到时自动回退到设备语音。离线背词请切到设备语音。</p></div>';
 
+    var dict = '<div class="card dict">' +
+      '<h3>查词</h3>' +
+      '<div class="dwrap">' +
+        '<input id="dq" type="search" autocomplete="off" autocapitalize="off" ' +
+          'autocorrect="off" spellcheck="false" placeholder="输入英文单词">' +
+        '<div class="dsug" id="dsug" hidden></div>' +
+      '</div>' +
+      '<div id="dout"></div>' +
+    '</div>';
+
     view.innerHTML = '<div class="pad"><div class="masthead"><h1>主页</h1></div>' +
-      body + stats + sound + '</div>';
+      dict + body + stats + sound + '</div>';
 
     var el;
+    wireDict();
+    wireBackup();
     if ((el = document.getElementById('h-out')))
       el.addEventListener('click', function(){ auth.signOut(); });
     if ((el = document.getElementById('h-in'))) el.addEventListener('click', function(){ doAuth(false); });
@@ -653,6 +668,136 @@
       try { localStorage.setItem(VOICE_LS, this.value); } catch(e){}
       speakSynth('vocabulary');
     });
+  }
+
+  /* ---------------- 查词 ----------------
+     ECDICT 精简版,按首字母分片,查到哪个字母才下载哪片。 */
+  var shards = {}, shardWait = {};
+
+  function loadShard(letter){
+    if (shards[letter]) return Promise.resolve(shards[letter]);
+    if (shardWait[letter]) return shardWait[letter];
+    shardWait[letter] = fetch('dict/' + letter + '.json')
+      .then(function(r){ if (!r.ok) throw new Error('miss'); return r.json(); })
+      .then(function(j){ shards[letter] = j; return j; })
+      .catch(function(){ shards[letter] = {}; return {}; });
+    return shardWait[letter];
+  }
+
+  function lookup(word){
+    var w = String(word || '').trim().toLowerCase();
+    if (!w) return Promise.resolve(null);
+    return loadShard(w[0]).then(function(sh){
+      var hit = sh[w];
+      if (typeof hit === 'string'){          // 词形变化,指向原形
+        var base = hit;
+        return loadShard(base[0]).then(function(s2){
+          var e = s2[base];
+          return e && typeof e === 'object' ? { w:base, from:w, e:e } : null;
+        });
+      }
+      return hit ? { w:w, e:hit } : null;
+    });
+  }
+
+  function suggest(prefix, limit){
+    var p = String(prefix || '').trim().toLowerCase();
+    if (p.length < 1) return Promise.resolve([]);
+    return loadShard(p[0]).then(function(sh){
+      var out = [];
+      for (var k in sh){
+        if (k.lastIndexOf(p, 0) === 0){
+          out.push(k);
+          if (out.length > 400) break;
+        }
+      }
+      out.sort(function(a, b){ return a.length - b.length || (a < b ? -1 : 1); });
+      return out.slice(0, limit || 8);
+    });
+  }
+
+  function dictCard(hit){
+    var e = hit.e;
+    var senses = (e.t || []).map(function(s){
+      var m = String(s).match(POS_RE);
+      return '<span class="sense">' +
+        (m ? '<span class="pos">' + esc(m[1].trim()) + '</span>' + esc(m[2]) : esc(s)) +
+      '</span>';
+    }).join('');
+    var inWrong = wrongIdx(hit.w) >= 0;
+    return '<div class="dres">' +
+      '<div class="dhead">' +
+        '<span class="dw">' + esc(hit.w) + '</span>' +
+        (e.p ? '<span class="dp">' + esc(e.p) + '</span>' : '') +
+        (e.o ? '<span class="dox">牛津核心</span>' : '') +
+      '</div>' +
+      (hit.from ? '<p class="dfrom">' + esc(hit.from) + ' → ' + esc(hit.w) + '</p>' : '') +
+      '<div class="dsenses">' + senses + '</div>' +
+      '<div class="row" style="margin-top:12px">' +
+        '<button class="btn gho" id="d-say">朗读</button>' +
+        '<button class="btn" id="d-add">' + (inWrong ? '移出常错词' : '加入常错词') + '</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function wireDict(){
+    var box = document.getElementById('dq');
+    if (!box) return;
+    var sug = document.getElementById('dsug');
+    var res = document.getElementById('dout');
+    var timer = null, seq = 0;
+
+    function showWord(w){
+      box.value = w;
+      sug.hidden = true;
+      var my = ++seq;
+      lookup(w).then(function(hit){
+        if (my !== seq) return;
+        if (!hit){
+          res.innerHTML = '<p class="dnone">词典里没有「' + esc(w) + '」</p>';
+          return;
+        }
+        res.innerHTML = dictCard(hit);
+        document.getElementById('d-say').addEventListener('click', function(){ speak(hit.w); });
+        document.getElementById('d-add').addEventListener('click', function(){
+          if (wrongIdx(hit.w) >= 0){
+            removeWrong(hit.w);
+            toast('已移出常错词');
+          } else {
+            addWrong({ w:hit.w, p:hit.e.p || '', m:(hit.e.t || []).slice(0, 3) });
+            toast('已加入常错词');
+          }
+          showWord(hit.w);
+        });
+        speak(hit.w);
+      });
+    }
+
+    box.addEventListener('input', function(){
+      clearTimeout(timer);
+      var v = box.value.trim();
+      if (!v){ sug.hidden = true; res.innerHTML = ''; return; }
+      timer = setTimeout(function(){
+        var my = ++seq;
+        suggest(v, 8).then(function(list){
+          if (my !== seq) return;
+          if (!list.length){ sug.hidden = true; return; }
+          sug.innerHTML = list.map(function(w){
+            return '<button data-w="' + esc(w) + '">' + esc(w) + '</button>';
+          }).join('');
+          sug.hidden = false;
+          Array.prototype.forEach.call(sug.querySelectorAll('button'), function(el){
+            el.addEventListener('click', function(){ showWord(el.getAttribute('data-w')); });
+          });
+        });
+      }, 140);
+    });
+
+    box.addEventListener('keydown', function(e){
+      if (e.key === 'Enter'){ e.preventDefault(); showWord(box.value.trim()); }
+      else if (e.key === 'Escape'){ sug.hidden = true; }
+    });
+    box.addEventListener('blur', function(){ setTimeout(function(){ sug.hidden = true; }, 180); });
   }
 
   /* ---------------- 备份码 ----------------
@@ -812,7 +957,10 @@
     if (!cur) return;
     var k = key(b.key, n);
     var at = data.pos[k] || 0;
-    st.idx = (data.done[k] || at >= cur.cards.length) ? 0 : at;
+    var redo = !!data.done[k];
+    st.idx = (redo || at >= cur.cards.length) ? 0 : at;
+    // 重新过一遍时状态回到「进行中」,而不是一直停在「完成」
+    if (redo){ delete data.done[k]; data.pos[k] = 0; }
     st.flipped = false; st.sflip = false;
     if (b.key !== 'wrong'){ data.last = { book:b.key, deck:n }; persist(); }
     sub = { view:'study', draw:drawStudy };
@@ -833,7 +981,13 @@
         '<div class="stage" id="s-stage"><div class="drag" id="s-drag">' +
           '<div class="inner" id="s-inner">' +
             '<div class="face front"><span class="star" id="s-star">常错词</span>' +
-              '<div class="word" id="s-word"></div><div class="ipa" id="s-ipa"></div></div>' +
+              '<div id="s-fw"><div class="word" id="s-word"></div>' +
+                '<div class="ipa" id="s-ipa"></div></div>' +
+              '<div id="s-fe" hidden><p class="endt" id="s-endt"></p>' +
+                '<div class="row" style="justify-content:center">' +
+                  '<button class="btn" id="d-again">再过一遍</button>' +
+                  '<button class="btn pri" id="d-next"></button></div>' +
+                '<p class="endh">右滑回去复习</p></div></div>' +
             '<div class="face back"><div class="echo" id="s-echo"></div>' +
               '<div class="zh" id="s-zh"></div></div>' +
           '</div>' +
@@ -855,7 +1009,6 @@
   }
 
   // 考研书里一个义项可能挂多个词性:"vt. vi. 散发"
-  var POS_RE = /^((?:(?:adj|adv|vt|vi|v|n|conj|prep|pron|int|abbr|num|art)\.\s*)+)(.*)$/;
   function renderZh(list){
     return (list || []).map(function(s){
       var m = String(s).match(POS_RE);
@@ -864,9 +1017,14 @@
     }).join('');
   }
 
+  function atEnd(){ return cur && st.idx >= cur.cards.length; }
+
   function paint(){
     var cards = cur.cards;
-    if (st.idx >= cards.length) return finish();
+    document.getElementById('s-fw').hidden = atEnd();
+    document.getElementById('s-fe').hidden = !atEnd();
+    document.getElementById('s-sent').style.visibility = atEnd() ? 'hidden' : '';
+    if (atEnd()) return paintEnd();
     var c = cards[st.idx];
 
     var w = document.getElementById('s-word');
@@ -901,7 +1059,7 @@
     persist();
   }
 
-  function finish(){
+  function paintEnd(){
     var isW = book.key === 'wrong';
     if (!isW){
       var k = key(book.key, cur.n);
@@ -909,21 +1067,14 @@
     }
     document.getElementById('s-meta').textContent = (isW ? '常错词' : cur.name) + ' · 完成';
     document.getElementById('s-rail').style.width = '100%';
-    var st2 = document.getElementById('s-stage');
-    st2.outerHTML =
-      '<div class="done"><p>过完了 —— ' + cur.cards.length + ' 个词。</p>' +
-        '<button class="btn" id="d-again">再过一遍</button> ' +
-        '<button class="btn pri" id="d-next">' + (isW ? '回到常错词' : '下一组') + '</button></div>';
-    document.getElementById('s-sent').style.display = 'none';
-    document.getElementById('s-hint').style.display = 'none';
-    document.getElementById('d-again').addEventListener('click', function(){
-      st.idx = 0; st.flipped = false; st.sflip = false; drawStudy();
-    });
-    document.getElementById('d-next').addEventListener('click', function(){
-      if (isW) return openWrongList();
-      var nx = book.decks.filter(function(d){ return d.n === cur.n + 1; })[0];
-      if (nx) openDeck(book, nx.n, backTo); else leaveStudy();
-    });
+    document.getElementById('s-star').classList.remove('on');
+    document.getElementById('s-endt').textContent =
+      '过完了 —— ' + cur.cards.length + ' 个词';
+    var nx = isW ? null : book.decks.filter(function(d){ return d.n === cur.n + 1; })[0];
+    document.getElementById('d-next').textContent =
+      isW ? '回到常错词' : nx ? '下一组' : '回到列表';
+    document.getElementById('s-inner').classList.remove('flipped');
+    st.flipped = false;
   }
 
   function wire(){
@@ -942,6 +1093,7 @@
     function fade(){ if (!used){ used = true; hint.classList.add('dim'); } }
 
     function onHold(){
+      if (atEnd()) return;
       held = true; buzz();
       var c = cur.cards[st.idx];
       if (!c) return;
@@ -963,6 +1115,7 @@
 
     function advance(dir){
       fade();
+      if (dir > 0 && atEnd()) { reset(true); return; }
       var out = dir > 0 ? -1 : 1;
       drag.style.transition = 'transform .2s ease-out, opacity .2s ease-out';
       drag.style.transform = 'translateX(' + (out * 120) + '%) rotate(' + (out * 6) + 'deg)';
@@ -976,7 +1129,6 @@
         drag.style.transition = 'none';
         drag.style.transform = 'translateX(' + (-out * 60) + '%)';
         drag.style.opacity = '0';
-        if (st.idx >= cur.cards.length) return finish();
         paint();
         requestAnimationFrame(function(){
           inner.style.transition = '';
@@ -987,6 +1139,7 @@
     }
 
     function flip(){
+      if (atEnd()) return;
       fade();
       st.flipped = !st.flipped;
       inner.style.transition = '';
@@ -994,6 +1147,7 @@
     }
 
     stage.addEventListener('pointerdown', function(e){
+      if (e.target.closest('button')){ active = false; return; }
       active = true; moved = false; held = false;
       sx = e.clientX; sy = e.clientY; t0 = Date.now();
       reset(false);
@@ -1016,7 +1170,11 @@
       var dx = e.clientX - sx, dy = e.clientY - sy;
       var dt = Date.now() - t0, ax = Math.abs(dx), ay = Math.abs(dy);
       if (held){ held = false; reset(false); return; }
-      if (!moved && dt < 500){ reset(false); speak(cur.cards[st.idx].w); fade(); return; }
+      if (!moved && dt < 500){
+        reset(false);
+        if (!atEnd()){ speak(cur.cards[st.idx].w); fade(); }
+        return;
+      }
       if (ax >= ay && ax > 55){
         if (dx < 0) advance(1);
         else if (st.idx > 0) advance(-1);
@@ -1029,6 +1187,18 @@
     stage.addEventListener('pointerup', release);
     stage.addEventListener('pointercancel', function(){
       active = false; held = false; clearHold(); reset(true);
+    });
+
+    document.getElementById('d-again').addEventListener('click', function(){
+      st.idx = 0; st.flipped = false; st.sflip = false;
+      var k = key(book.key, cur.n);
+      delete data.done[k]; data.pos[k] = 0; persist();
+      paint();
+    });
+    document.getElementById('d-next').addEventListener('click', function(){
+      if (book.key === 'wrong') return openWrongList();
+      var nx = book.decks.filter(function(d){ return d.n === cur.n + 1; })[0];
+      if (nx) openDeck(book, nx.n, backTo); else leaveStudy();
     });
 
     document.getElementById('s-sent').addEventListener('click', function(){
@@ -1044,7 +1214,7 @@
       if (e.key === 'ArrowLeft'){ e.preventDefault(); advance(1); }
       else if (e.key === 'ArrowRight'){ e.preventDefault(); if (st.idx > 0) advance(-1); }
       else if (e.key === 'ArrowUp' || e.key === 'ArrowDown'){ e.preventDefault(); flip(); }
-      else if (e.key === ' '){ e.preventDefault(); speak(cur.cards[st.idx].w); }
+      else if (e.key === ' '){ e.preventDefault(); if (!atEnd()) speak(cur.cards[st.idx].w); }
       else if (e.key === 'Enter'){ e.preventDefault(); document.getElementById('s-sent').click(); }
     };
   }

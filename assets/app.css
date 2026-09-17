@@ -195,6 +195,12 @@ h2{font-family:var(--serif);font-weight:500;font-size:24px;margin:8px 0 4px}
 .hint b{font-weight:500;color:var(--ink)}
 .hint.dim{opacity:.35}
 
+#s-fe{display:flex;flex-direction:column;align-items:center;gap:16px}
+.endt{font-family:var(--serif);font-size:clamp(19px,5vw,24px);margin:0;color:var(--card-ink)}
+.endh{margin:0;font-size:12px;color:var(--card-sub);letter-spacing:.04em}
+#s-fe .btn{background:transparent;border-color:var(--card-edge);color:var(--card-ink)}
+#s-fe .btn.pri{background:var(--card-ink);border-color:var(--card-ink);color:var(--card-face)}
+
 .done{text-align:center;padding:36px 20px}
 .done p{font-family:var(--serif);font-size:22px;margin:0 0 20px}
 .btn{border:1px solid var(--line);background:var(--panel);padding:10px 20px;border-radius:999px;font-size:14px}
@@ -243,6 +249,58 @@ h2{font-family:var(--serif);font-weight:500;font-size:24px;margin:8px 0 4px}
 .kv:first-of-type{border-top:0}
 .kv b{font-weight:500;font-variant-numeric:tabular-nums}
 .note{font-size:11.5px;line-height:1.7;color:var(--ink-2);margin:10px 2px 0}
+
+/* ---------- 查词 ---------- */
+.dwrap{position:relative}
+.dict input{
+  width:100%;font:inherit;font-size:16px;color:var(--ink);
+  background:var(--panel-2);border:1px solid var(--line);
+  border-radius:10px;padding:12px 14px;-webkit-appearance:none;appearance:none;
+}
+.dict input:focus{outline:none;border-color:var(--accent)}
+.dsug{
+  position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:30;
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  box-shadow:0 12px 30px -12px rgba(0,0,0,.45);
+  overflow:hidden;max-height:290px;overflow-y:auto;
+}
+.dsug button{
+  display:block;width:100%;text-align:left;padding:11px 14px;font-size:15px;
+  font-family:var(--serif);
+}
+.dsug button + button{border-top:1px solid var(--line)}
+.dsug button:hover{background:var(--panel-2)}
+
+.dres{margin-top:16px;padding-top:15px;border-top:1px solid var(--line)}
+.dhead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.dw{font-family:var(--serif);font-size:25px;font-weight:500}
+.dp{font-family:var(--ipa);font-size:14px;color:var(--ink-2)}
+.dox{
+  font-size:10.5px;letter-spacing:.06em;padding:2px 7px;border-radius:999px;
+  background:var(--accent);color:var(--bg);
+}
+.dfrom{margin:7px 0 0;font-size:12px;color:var(--ink-2)}
+.dsenses{
+  margin-top:11px;display:flex;flex-direction:column;gap:7px;
+  font-family:var(--cjk);font-size:14.5px;line-height:1.6;
+}
+.dsenses .sense{display:block}
+.dsenses .pos{
+  font-family:var(--ui);font-size:.72em;color:var(--ink-2);
+  margin-right:7px;letter-spacing:.03em;
+}
+.dnone{margin:16px 0 0;font-size:13.5px;color:var(--ink-2)}
+
+/* 备份码 */
+.bk{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+.bk label{font-size:12px;color:var(--ink-2);line-height:1.6}
+.bk textarea{
+  width:100%;font:inherit;font-size:11.5px;line-height:1.5;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:var(--ink);background:var(--panel-2);border:1px solid var(--line);
+  border-radius:9px;padding:10px;resize:vertical;word-break:break-all;
+}
+.bkn{font-size:11.5px;color:var(--ink-2)}
 
 /* voice picker */
 .voice{margin-top:14px;display:flex;align-items:center;gap:10px}
