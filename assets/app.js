@@ -634,16 +634,10 @@
       '<p class="note">真人录音取自有道词典的英式发音,重音清晰,需要联网;' +
       '拉不到时自动回退到设备语音。离线背词请切到设备语音。</p></div>';
 
-    var dict = '<div class="card dict">' +
-      '<h3>查词</h3>' +
-      dictMarkup('d') +
-    '</div>';
-
     view.innerHTML = '<div class="pad"><div class="masthead"><h1>主页</h1></div>' +
-      dict + body + stats + sound + '</div>';
+      body + stats + sound + '</div>';
 
     var el;
-    wireDict();
     wireBackup();
     if ((el = document.getElementById('h-out')))
       el.addEventListener('click', function(){ auth.signOut(); });
@@ -760,7 +754,7 @@
     document.getElementById('pclose').addEventListener('click', closePull);
     wireDict('p');
 
-    var sy = 0, dy = 0, pulling = false, armed = false;
+    var sy = 0, dy = 0, peek = 0, pulling = false, armed = false;
 
     function canPull(){
       return !pullOpen && (!sub || sub.view !== 'study') &&
@@ -768,7 +762,9 @@
     }
 
     document.addEventListener('pointerdown', function(e){
-      if (e.target.closest('#pull') || e.target.closest('.nav')) return;
+      if (e.target.closest('#pull')) return;
+      if (pullOpen){ closePull(); return; }
+      if (e.target.closest('.nav')) return;
       armed = canPull();
       sy = e.clientY; dy = 0; pulling = false;
     }, { passive:true });
@@ -777,13 +773,14 @@
       if (!armed) return;
       dy = e.clientY - sy;
       if (dy <= 0){
-        if (pulling){ pullEl.style.height = '0px'; pulling = false; }
+        if (pulling){ pullEl.style.transform = ''; pulling = false; }
         return;
       }
       if (!pulling && dy < 8) return;
       pulling = true;
       pullEl.classList.add('drag');
-      pullEl.style.height = Math.min(dy * 0.55, 120) + 'px';
+      peek = Math.min(dy * 0.55, 130);
+      pullEl.style.transform = 'translateY(calc(-100% + ' + peek + 'px))';
     }, { passive:true });
 
     // 触摸时要主动挡下页面的橡皮筋滚动,否则下拉会被浏览器抢走
@@ -795,8 +792,9 @@
       if (!pulling){ armed = false; return; }
       pulling = false; armed = false;
       pullEl.classList.remove('drag');
-      if (parseFloat(pullEl.style.height) > 46) openPull();
-      else pullEl.style.height = '0px';
+      if (peek > 46) openPull();
+      else pullEl.style.transform = '';
+      peek = 0;
     }
     document.addEventListener('pointerup', end, { passive:true });
     document.addEventListener('pointercancel', end, { passive:true });
@@ -805,9 +803,9 @@
   function openPull(){
     if (!pullEl) return;
     pullOpen = true;
+    pullEl.style.transform = '';
     pullEl.classList.add('open');
     pullEl.setAttribute('aria-hidden', 'false');
-    pullEl.style.height = pullBox.offsetHeight + 'px';
     var q = document.getElementById('pq');
     if (q) setTimeout(function(){ q.focus(); }, 60);
   }
@@ -817,17 +815,13 @@
     pullOpen = false;
     pullEl.classList.remove('open', 'drag');
     pullEl.setAttribute('aria-hidden', 'true');
-    pullEl.style.height = '0px';
+    pullEl.style.transform = '';
     var q = document.getElementById('pq');
     if (q){ q.blur(); q.value = ''; }
     var o = document.getElementById('pout');
     if (o) o.innerHTML = '';
     var s = document.getElementById('psug');
     if (s) s.hidden = true;
-  }
-
-  function growPull(){
-    if (pullOpen && pullEl) pullEl.style.height = pullBox.offsetHeight + 'px';
   }
 
   function wireDict(idp){
@@ -846,11 +840,9 @@
         if (my !== seq) return;
         if (!hit){
           res.innerHTML = '<p class="dnone">词典里没有「' + esc(w) + '」</p>';
-          growPull();
-          return;
+            return;
         }
         res.innerHTML = dictCard(hit, idp);
-        growPull();
         document.getElementById(idp + '-say').addEventListener('click', function(){ speak(hit.w); });
         document.getElementById(idp + '-add').addEventListener('click', function(){
           if (wrongIdx(hit.w) >= 0){
@@ -879,8 +871,7 @@
             return '<button data-w="' + esc(w) + '">' + esc(w) + '</button>';
           }).join('');
           sug.hidden = false;
-          growPull();
-          Array.prototype.forEach.call(sug.querySelectorAll('button'), function(el){
+            Array.prototype.forEach.call(sug.querySelectorAll('button'), function(el){
             el.addEventListener('click', function(){ showWord(el.getAttribute('data-w')); });
           });
         });
